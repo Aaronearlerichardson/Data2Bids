@@ -7,6 +7,9 @@ Created on Mon Jan 28 09:58:27 2019
 """
 
 import argparse
+import os
+import sys
+sys.path.insert(0, os.getcwd())
 from data2bids.data2bids import Data2Bids
 
 def get_parser():
