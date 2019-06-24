@@ -41,6 +41,13 @@ def get_parser():
             , help="Output BIDS directory, Default: Inside current directory ",
             )
 
+    parser.add_argument(
+            "-m"
+            ,"--multi_echo"
+            , action='store_true'
+            , required=False
+            , help="indicator of multi-echo dataset",
+            )
 # Add logging
 #    parser.add_argument(
 #            "-l"

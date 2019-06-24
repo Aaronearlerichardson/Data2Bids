@@ -17,7 +17,7 @@ import data2bids.utils as utils
 
 class Data2Bids():
 
-    def __init__(self, input_dir=None, config=None, output_dir=None):
+    def __init__(self, input_dir=None, config=None, output_dir=None, multi_echo=False):
         self._input_dir = None
         self._config_path = None
         self._config = None
@@ -28,6 +28,10 @@ class Data2Bids():
         self.set_data_dir(input_dir)
         self.set_config_path(config)
         self.set_bids_dir(output_dir)
+        self.set_multi_echo(multi_echo)
+
+    def set_multi_echo(self,multi_echo):
+        self._multi_echo = multi_echo
 
     def get_data_dir(self):
         return self._data_dir
@@ -202,6 +206,7 @@ class Data2Bids():
 
             # now we can scan all files and rearrange them
             for root, _, files in os.walk(self._data_dir):
+                i = 0
                 for file in files:
                     src_file_path = os.path.join(root, file)
                     dst_file_path = self._bids_dir
@@ -234,6 +239,14 @@ class Data2Bids():
                     except AssertionError:
                         print("No session found for %s" %src_file_path)
                         continue
+
+                    if self._multi_echo :
+                        try:
+                            echo_match = self.match_regexp(self._config["echo"], file)
+                            new_name = new_name + "_echo-" + echo_match
+                        except AssertionError:
+                            print("No echo found for %s" %src_file_path)
+                            continue
 
                     # Matching the anat/fmri data type and task
                     try:
@@ -290,7 +303,7 @@ class Data2Bids():
                         #nib_img = nib.load(src_file_path)
                         #TR = nib_img.header.get_zooms()[3]
                         try:
-                            self.bold_dump(dst_file_path, new_name, task_label_match)
+                             self.bold_dump(dst_file_path, new_name, task_label_match)
                         except FileNotFoundError:
                             print("Cannot write %s" %(dst_file_path + new_name + ".nii.gz"))
                             continue
@@ -303,11 +316,3 @@ class Data2Bids():
 
         else:
             print("Warning: No parameters are defined !")
-            
-#def main():
-#    data2bids = Data2Bids(input_dir="/home/ltetrel/Documents/data/preventadRaw"
-#                          , config="/home/ltetrel/Documents/work/Data2Bids/example/config.json")
-#    data2bids.run()
-#    
-#if __name__ == '__main__':
-#    main()
