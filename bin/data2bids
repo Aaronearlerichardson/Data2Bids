@@ -47,10 +47,17 @@ def get_parser():
     parser.add_argument(
             "-m"
             ,"--multi_echo"
-            , action='store_true'
+            , nargs='*'
+            , type=int
             , required=False
             , help="indicator of multi-echo dataset",
             )
+    #parser.add_argument(
+    #        "integers"
+    #        , type=int
+    #        , nargs='+'
+    #        , help='an integer that tells what run the multi echo is on'
+    #        )
 # Add logging
 #    parser.add_argument(
 #            "-l"

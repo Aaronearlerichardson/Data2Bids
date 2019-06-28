@@ -19,7 +19,7 @@ import data2bids.utils as utils
 
 class Data2Bids():
 
-    def __init__(self, input_dir=None, config=None, output_dir=None, multi_echo=False):
+    def __init__(self, input_dir=None, config=None, output_dir=None, multi_echo=None):
         self._input_dir = None
         self._config_path = None
         self._config = None
@@ -33,6 +33,15 @@ class Data2Bids():
         self.set_multi_echo(multi_echo)
 
     def set_multi_echo(self,multi_echo):
+        if multi_echo is None:
+            self.is_multi_echo = False
+        else:
+            self.is_multi_echo = True
+            if not multi_echo:
+                self._multi_echo = 0
+            else:
+                self._multi_echo = multi_echo
+
         self._multi_echo = multi_echo
 
     def get_data_dir(self):
@@ -81,7 +90,7 @@ class Data2Bids():
             try:
                 self._bids_dir = os.path.join(self._data_dir, self._dataset_name + "_BIDS")
             except TypeError:
-                print("Error: Please provice input data directory if no BIDS directory...")
+                print("Error: Please provide input data directory if no BIDS directory...")
         else:
             self._bids_dir = bids_dir
 
@@ -126,6 +135,11 @@ class Data2Bids():
         except FileNotFoundError:
             print("bids-validator does not appear to be installed")
 
+    def maketsv(self,tsv_dir):
+        for folder in tsv_dir :
+            for file in folder :
+                return()
+
     def run(self):
 
         # First we check that every parameters are configured
@@ -164,9 +178,11 @@ class Data2Bids():
                 json.dump(data, fst, ensure_ascii=False)
 
             # now we can scan all files and rearrange them
-            for root, _, files in os.walk(self._data_dir):
+            for root, tsv_dir, files in os.walk(self._data_dir):
                 i = 0
+                sidecar_file_path = ""
                 for file in files:
+                    
                     src_file_path = os.path.join(root, file)
                     dst_file_path = self._bids_dir
 
@@ -175,12 +191,20 @@ class Data2Bids():
                     data_type_match = None
                     run_match = None
                     new_name = None
-
+                    
+                    if re.match(".*?" + ".json", file):
+                        sidecar_file_path = src_file_path
+                        continue
+                    elif re.match(".*?" + "README.txt", file): 
+                        shutil.copy(src_file_path, dst_file_path +"README.txt")
+                        continue
+                    elif re.match(".*?" + ".1D", file): 
+                        continue
                     # if the file doesn't match the extension, we skip it
-                    if not re.match(".*?" + curr_ext, file):
+                    elif not any(re.match(".*?" + ext, file) for ext in curr_ext):
                         print("Warning : Skipping %s" %src_file_path)
                         continue
-
+                    #print("trying %s" %src_file_path)
                     # Matching the participant label
                     try:
                         part_match = self.match_regexp(self._config["partLabel"], file)
@@ -199,20 +223,21 @@ class Data2Bids():
                         print("No session found for %s" %src_file_path)
                         continue
 
-                    if self._multi_echo :
-                        try:
-                            echo_match = self.match_regexp(self._config["echo"], file)
-                            new_name = new_name + "_echo-" + echo_match
-                        except AssertionError:
-                            print("No echo found for %s" %src_file_path)
-                            continue
-
                     # Matching the anat/fmri data type and task
                     try:
                         data_type_match = self.match_regexp(self._config["anat"]
                                                             , file
                                                             , subtype=True)
                         dst_file_path = dst_file_path + "/anat"
+
+                        try:
+                            acq_label_match = self.match_regexp(self._config["anat.acq"]
+                                                                    , file
+                                                                    , subtype=True)
+                            new_name = new_name + "_acq-" + acq_label_match
+                        except AssertionError:
+                            print("no optional labels for %s" %src_file_path)
+                            #    continue
                     except AssertionError:
                         # If no anatomical, trying functionnal
                         try:
@@ -240,6 +265,16 @@ class Data2Bids():
                     except AssertionError:
                         print("No run found for %s" %src_file_path)
 
+                    if self.is_multi_echo :
+                        if int(run_match) in self._multi_echo:
+                            try:
+                                echo_match = self.match_regexp(self._config["echo"], file)
+                                new_name = new_name + "_echo-" + echo_match
+                            except AssertionError:
+                                print("No echo found for %s" %src_file_path)
+                                continue
+                        
+
                     # Adding the modality to the new filename
                     new_name = new_name + "_" + data_type_match
 
@@ -248,7 +283,7 @@ class Data2Bids():
                         os.makedirs(dst_file_path)
 
                     # finally, if the file is not nifti, we convert it using nibabel
-                    if curr_ext != ".nii" or curr_ext != ".nii.gz":
+                    if not ".nii" in curr_ext or not ".nii.gz" in curr_ext:
                         # loading the original image
                         nib_img = nib.load(src_file_path)
                         nib_affine = np.array(nib_img.affine)
@@ -281,14 +316,22 @@ class Data2Bids():
                         nib.save(nifti_img, dst_file_path + new_name + ".nii.gz")
 
                     # if it is already a nifti file, no need to convert it so we just copy rename
+                    elif ".nii.gz" in file:
+                        shutil.copy(src_file_path, dst_file_path + new_name + ".nii.gz")
                     else:
                         shutil.copy(src_file_path, dst_file_path + new_name + ".nii")
                         #compression just if .nii files
                         if compress is True:
+                            print("zipping " + file)
                             with open(dst_file_path + new_name + ".nii", 'rb') as f_in:
                                 with gzip.open(dst_file_path + new_name + ".nii.gz", 'wb') as f_out:
                                     shutil.copyfileobj(f_in, f_out)
                             os.remove(dst_file_path + new_name + ".nii")
+
+                    # move the sidecar from input to output
+                    if sidecar_file_path.replace(".json","") == src_file_path.split(".ni")[0]:
+                        shutil.copy(sidecar_file_path, dst_file_path + new_name + ".json")
+
 
                     # finally, if it is a bold experiment, we need to add the JSON file
                     if data_type_match == "bold":
@@ -301,17 +344,21 @@ class Data2Bids():
                                 data = {'RepetitionTime': float(repetition_time),
                                         'TaskName': task_label_match,
                                         'DelayTime' : delaytime.split()[i]}
-                                i += 1
+                                if i < (len(data['DelayTime']-1)):
+                                    i += 1 
                                 json.dump(data, fst, ensure_ascii=False)
                         except FileNotFoundError:
                             print("Cannot write %s" %(dst_file_path + new_name + ".nii.gz"))
                             continue
+                #'''
+                
+                        
 
             # Output
             utils.tree(self._bids_dir)
 
-            # Finally, we check with bids_validator if everything went alright
-            self.bids_validator()
+            # Finally, we check with bids_validator if everything went alright (This wont work)
+            #self.bids_validator()
 
         else:
             print("Warning: No parameters are defined !")
